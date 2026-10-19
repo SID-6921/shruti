@@ -16,7 +16,7 @@ checksums.
 
 *Shruti* (श्रुति) is Sanskrit for "that which is heard".
 
-[Model card](https://huggingface.co/udgamlabs/Shruti) · [Try it in your browser](https://udgamlabs.com/models/shruti) · [Demo on Hugging Face](https://huggingface.co/spaces/udgamlabs/Shruti) · [udgamlabs.com](https://udgamlabs.com)
+[Model card](https://huggingface.co/udgamlabs/Shruti) · [Try it in your browser](https://udgamlabs.com/models/shruti) · [Demo on Hugging Face](https://huggingface.co/spaces/udgamlabs/Shruti) · [Technical report](https://udgamlabs.com/research/shruti) · [udgamlabs.com](https://udgamlabs.com)
 
 | | |
 |---|---|
@@ -113,22 +113,35 @@ windows. A streaming mode takes about a second of audio at a time and commits wo
 
 Word error rate (%, lower is better). Every model was run by us on the same test sets with the same text normaliser and
 scorer (Monsoon uses the official OIWER lattice scorer of the Hugging Face Open ASR leaderboard). Shruti was run in the
-on-device engine (5-beam, language set); the other models on a GPU or a Mac with their default decoding. Measured
-2026-10-18/19. Exact versions, settings and two more Hinglish models: [docs/comparison.md](docs/comparison.md).
+on-device engine (5-beam, language set); the other models on a GPU or a Mac with the decoding settings listed in
+[docs/comparison.md](docs/comparison.md), which also has exact versions and two more Hinglish models. Measured
+2026-10-18/19. n/c: not comparable (the model writes Roman script only); –: not measured.
 
 | Model | File size | Monsoon Hindi | FLEURS Hindi | Lahaja (Hindi accents) | MUCS Hinglish | Svarah (Indian English) | LibriSpeech (English) | Words invented on 100 silent clips |
 |---|---|---|---|---|---|---|---|---|
-| **Shruti** | **29.5 MB** | 20.46 | 19.92 | 26.28 | **35.21** | 22.47 | **5.95** | 0 |
+| **Shruti** | **29.5 MB** | 20.46 | 19.92 | 26.28 | **35.21** | 22.47 | 5.95 | 0 |
 | [Koyal-hi-120M](https://huggingface.co/adalat-ai/koyal-hi-120m-1.0) | 481 MB | **11.64** | **9.56** | 18.70 | 57.51 | Hindi only | Hindi only | 0 |
 | [IndicConformer Hindi](https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-hi-onnx) (fp32) | 482 MB | 15.31 | 11.31 | **13.18** | 64.48 | Hindi only | Hindi only | 88 |
 | [Vosk small Hindi + Indian English](https://alphacephei.com/vosk/models) | 139 MB | 35.75 | 18.07 | 26.60 | 61.14 | 38.51 | 30.18 | 1 |
-| [Whisper-Hindi2Hinglish-Swift](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift) | 296 MB | 57.16 (Roman script) | – | – | – | **20.16** | 12.60 | 1,676 |
-| [Whisper-small](https://huggingface.co/openai/whisper-small) | 971 MB | 128.3 | 59.4 | 117.5 | – | – | – | – |
+| [Whisper-Hindi2Hinglish-Swift](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift) | 296 MB | 57.16 (Roman script) | n/c | n/c | n/c | 20.16 | 12.60 | 1,676 |
+| [Whisper-small](https://huggingface.co/openai/whisper-small) | 971 MB | 128.25 | 59.42 | 117.5 | – | – | – | – |
+| [Whisper large-v3](https://huggingface.co/openai/whisper-large-v3) (fp16) | 3,087 MB | 33.29 | 28.88 | 31.19 ¹ | 79.94 ¹ | **7.39** ¹ | **2.25** ¹ | 538 |
+
+¹ Whisper large-v3 (1.55B parameters; fp16 on a Mac GPU, beam 5, language set) on the first 300 Lahaja, Svarah and
+LibriSpeech clips and the first 600 MUCS clips; Shruti on the same clips: 22.87, 21.35, 5.76 and 45.3. On Monsoon and
+FLEURS both ran on every clip; in that run Shruti scored 20.46 and 20.14 (FLEURS with the newest engine build; 19.92 in
+the table is the build of 18 October).
 
 - **Hinglish:** Shruti has the lowest Hinglish word error rate of the open models we measured (MUCS 2021, same harness),
   and it stays ahead when both sides are converted to Roman script (34.32 vs 43.45 and 44.94 for whisper-base-hinglish
   and whisper-tiny-hinglish-v2; with the most forgiving converter the lead is narrow, 31.37 vs 32.66 and 34.22). Details
   in [docs/comparison.md](docs/comparison.md).
+- **Whisper large-v3:** Shruti is 100× smaller than OpenAI's Whisper large-v3 (29.5 MB vs 3,087 MB), and more accurate
+  on Hindi on the same clips: Monsoon 20.46 vs 33.29, FLEURS 20.14 vs 28.88, Lahaja 22.87 vs 31.19 (first 300 clips).
+  Whisper is far better on English: Svarah 7.39 vs 21.35 and LibriSpeech 2.25 vs 5.76 (first 300 clips each). Whisper
+  ran with plain beam search, without its temperature fallback, which causes some repetition loops; with those clips
+  removed Shruti still leads on Hindi (FLEURS 19.9 vs 26.4, Lahaja 22.9 vs 28.7). The leaderboard's own Whisper large-v3
+  Monsoon number (28.17, its decoding) is also behind Shruti's 20.46.
 - **Monsoon** is the public split of the Hindi test set used by the Hugging Face Open ASR leaderboard. Published
   leaderboard numbers for context: Whisper large-v3 28.17 (1.55B parameters), Voxtral Mini 3B 22.9, Qwen3-ASR-0.6B
   18.13, IndicConformer-600M 8.47. Shruti has not been submitted to the leaderboard, so it has no official rank, and the
@@ -152,14 +165,16 @@ On the phone, 42 of 51 test transcripts were identical to the Mac's; the rest di
 - **Pure Hindi accuracy.** Hindi-only models about 16× larger are far more accurate: Koyal-hi-120M makes roughly half
   as many errors on Monsoon and FLEURS, and IndicConformer half as many on accented Hindi (Lahaja). Choose them if you
   only need Hindi and have the memory.
-- **Indian-accented English** (Svarah 22.5) is behind Whisper-Hindi2Hinglish-Swift (20.2), which is 10× larger and
-  writes Hindi in Roman script only.
+- **English.** OpenAI's Whisper large-v3 (100× larger) is far more accurate on English: on the same clips, Svarah 7.39
+  vs 21.35 and LibriSpeech 2.25 vs 5.76. On Indian-accented English Shruti (Svarah 22.5) is also behind
+  Whisper-Hindi2Hinglish-Swift (20.2), which is 10× larger and writes Hindi in Roman script only.
 - **Spelling and grammar look-alikes**: है/हैं, मैं/में, की/के, and formal versus spoken forms (पे → पर, वो → वह) are common
   errors.
 - **Names it has never heard** are spelt by sound: in our own phone test it wrote its name, Shruti, as "सूती" and
   "shooty", and Udgam Labs as "outgum labs". Rare names and technical terms are often misheard; pass them as
   `keywords` to help.
-- **Noise and music** were not tested; only digital silence (0 invented words). Long audio is processed in 30 s windows.
+- **Noise and music** were not tested; only silent clips (0 invented words on 100 clips of digital silence and very
+  faint hiss). Long audio is processed in 30 s windows.
 - Numbers are written as words, the way they are spoken. There is no punctuation or capitalisation.
 - **Platforms:** we measured Shruti on a Mac (Apple silicon), Linux (x86), an Android phone and WebAssembly. The engine
   also runs on Windows and iOS, but we have not tested Shruti there.
@@ -169,31 +184,32 @@ On the phone, 42 of 51 test transcripts were identical to the Mac's; the rest di
 - **Start:** Cactus Whistle (55M, Apache-2.0), trained by Cactus Compute on European languages. We added 714 Devanagari
   vocabulary pieces and a Hindi language tag, then trained **all** weights (not an adapter) with 4-bit quantisation-aware
   training, so the exported 29.5 MB file behaves like the trained model.
-- **Data:** 2,732 hours (1,802 h Hindi / Hinglish, 930 h English), every source licensed for commercial use. English
+- **Data:** 2,732 hours of speech, every source licensed for commercial use. English
   words in Hindi transcripts are written in Latin script using each dataset's own annotations (for example AI4Bharat's
   `[english]` tags in IndicVoices). Test sentences were removed by text and audio hash.
-- **Recipe:** learning rate 5e-4 (new vocabulary rows 10×), one spelling per word for training targets, 50,000 updates
-  from Whistle, then 25,000 more at 2e-4 with more Indian English.
-- **Cost:** built on Cactus Whistle, whose pretraining was done by Cactus Compute; our fine-tuning took $5.45 of GPU time
-  on one rented RTX 5090.
+- **Recipe:** one spelling per word for training targets; trained from Whistle's weights, then continued with more
+  Indian English.
+
+The [technical report](https://udgamlabs.com/research/shruti) describes the vocabulary extension, the training method,
+the data and the evaluation in full, with the source of every number.
 
 ### Data credits
 
 Shruti was trained on these openly licensed datasets. We are grateful to their creators; please credit them if you
 build on this work.
 
-| Source | Hours | Licence |
-|---|---|---|
-| AI4Bharat IndicVoices, Hindi | 738.8 | CC-BY-4.0 |
-| ARTPARK-IISc Vaani, Hindi (transcribed train split) | 481.7 | CC-BY-4.0 |
-| AI4Bharat NPTEL (Indian-English lectures) | 698.1 | CC-BY-4.0 |
-| AI4Bharat Shrutilipi, Hindi | ~284 | CC-BY-4.0 |
-| AI4Bharat Kathbath, Hindi | 134.7 | CC-BY-4.0 |
-| Mozilla Common Voice 17, English with Indian / South Asian accents | 131.1 | CC0 |
-| LibriSpeech | 100.6 | CC-BY-4.0 |
-| MUCS 2021 Hindi-English (via dianavdavidson/MUCS-Hinglish) | 88.9 | CC-BY-4.0 on the card; the original corpus is CC-BY-SA-4.0 |
-| AI4Bharat Rural Women ASR v2, Hindi | 67.7 | CC-BY-4.0 |
-| Google FLEURS, Hindi train split | 6.1 | CC-BY-4.0 |
+| Source | Licence |
+|---|---|
+| AI4Bharat IndicVoices, Hindi | CC-BY-4.0 |
+| ARTPARK-IISc Vaani, Hindi (transcribed train split) | CC-BY-4.0 |
+| AI4Bharat Shrutilipi, Hindi | CC-BY-4.0 |
+| AI4Bharat Kathbath, Hindi | CC-BY-4.0 |
+| AI4Bharat Rural Women ASR v2, Hindi | CC-BY-4.0 |
+| Google FLEURS, Hindi train split | CC-BY-4.0 |
+| MUCS 2021 Hindi-English (via dianavdavidson/MUCS-Hinglish) | CC-BY-4.0 on the card; the original corpus is CC-BY-SA-4.0 |
+| AI4Bharat NPTEL (Indian-English lectures) | CC-BY-4.0 |
+| Mozilla Common Voice 17, English with Indian / South Asian accents | CC0 |
+| LibriSpeech | CC-BY-4.0 |
 
 ## Intended use
 
@@ -207,6 +223,19 @@ Apache-2.0 for the weights and everything in this repository. Shruti is a modifi
 Compute (Apache-2.0); see [`NOTICE`](NOTICE). The browser example includes the unmodified WebAssembly build of the Cactus
 needle engine (Apache-2.0), with its licence and notice in
 [`examples/browser/needle/`](examples/browser/needle/). The training data licences are listed above.
+
+## Citation
+
+```bibtex
+@techreport{udgamlabs2026shrutireport,
+  title       = {Shruti: offline speech-to-text for Hindi, English and Hinglish in 29.5 MB},
+  author      = {{Udgam Labs}},
+  institution = {Udgam Labs},
+  type        = {Technical report},
+  year        = {2026},
+  url         = {https://udgamlabs.com/research/shruti}
+}
+```
 
 ---
 

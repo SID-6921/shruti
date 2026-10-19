@@ -1,5 +1,23 @@
 # Release notes
 
+## Documentation update (19 October 2026)
+
+The model files and examples are unchanged (still 1.0.0; checksums in `SHA256SUMS` unchanged).
+
+- **Whisper large-v3, same harness:** added to the README results table and `docs/comparison.md`, with a same-clip table
+  and paired-bootstrap intervals. Shruti is 100× smaller than OpenAI's Whisper large-v3 and more accurate on Hindi on
+  the same clips (Monsoon 20.46 vs 33.29, FLEURS 20.14 vs 28.88, Lahaja 22.87 vs 31.19 on the first 300 clips). Whisper
+  is far better on English (Svarah 7.39 vs 21.35, LibriSpeech 2.25 vs 5.76 on the first 300 clips each); this is now
+  listed under "Where it falls short".
+- **Technical report:** linked from the README, with a BibTeX entry:
+  [udgamlabs.com/research/shruti](https://udgamlabs.com/research/shruti).
+- **Training:** "How it was trained" now gives a high-level description, and the data credits list every source with
+  its licence.
+- **Corrections:** Whisper-small's Monsoon and FLEURS numbers are given to two decimals (128.25, 59.42), as in
+  `docs/comparison.md`; Whisper-Hindi2Hinglish-Swift's FLEURS, Lahaja and MUCS cells read "n/c" (not comparable, Roman
+  script only) instead of "–"; the silence test is described exactly (50 clips of digital silence and 50 of very faint
+  hiss); the results note points to the decoding settings in `docs/comparison.md` instead of saying "default decoding".
+
 ## 1.0.0 (19 October 2026)
 
 First public release of Shruti, speech-to-text for Hindi, English and Hinglish. The weights are on Hugging Face
