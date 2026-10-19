@@ -1,0 +1,305 @@
+<!doctype html>
+<!--
+  Shruti in the browser: speech to text for Hindi, English and Hinglish, entirely inside this page.
+
+  Serve this folder over http and open it (the microphone needs http://localhost or https):
+      python3 -m http.server 8000      then open http://localhost:8000
+
+  How it works: shruti-worker.js runs the Cactus needle engine (WebAssembly, ./needle/) in a Web Worker. The first
+  load downloads shruti.cact (29.5 MB) from Hugging Face, checks its SHA-256 and keeps it in Cache Storage; after that
+  the page works offline. Audio is converted to 16 kHz mono in the page and never leaves the device.
+  No build step and no dependencies; single-threaded, so no special server headers are needed.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shruti in the browser</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light; --ink: #1C1B18; --graphite: #5E5C57; --rule: #E6E3DC; --signal: #B4432B; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+  .label { margin: 0; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--graphite); }
+  h1 { margin: 8px 0 12px; font-size: 40px; font-weight: 500; letter-spacing: -.01em; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 14px; }
+  button, .file { position: relative; font: inherit; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: #fff; padding: 10px 18px; cursor: pointer; }
+  .file { background: #fff; color: var(--ink); }
+  .file input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+  button:disabled, .file:has(input:disabled) { opacity: .4; cursor: not-allowed; }
+  .file:has(input:disabled) input { cursor: not-allowed; }
+  button:focus-visible, .file:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
+  progress { display: block; width: 100%; height: 4px; margin-bottom: 8px; accent-color: var(--ink); }
+  [hidden] { display: none !important; }
+  #output { min-height: 160px; margin-top: 16px; padding: 20px; border: 1px solid var(--rule); font-size: 24px; line-height: 1.6; overflow-wrap: anywhere; }
+  .meta { min-height: 1.5em; margin: 8px 0 0; font-size: 14px; color: var(--graphite); }
+  #error { color: var(--signal); }
+  .link { padding: 0; border: 0; background: none; color: var(--graphite); font-size: 14px; text-decoration: underline; }
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 14px; color: var(--graphite); }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <p class="label">Udgam Labs · Speech-to-text in the browser</p>
+  <h1>Shruti</h1>
+  <p>Speech to text for Hindi, English and Hinglish, running entirely in this page. The 29.5 MB model downloads once
+    from Hugging Face and stays in this browser. Audio never leaves your device.</p>
+
+  <div class="controls">
+    <button id="load" type="button">Load Shruti (29.5 MB, once)</button>
+    <button id="record" type="button" disabled>Record</button>
+    <label class="file">Transcribe an audio file
+      <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.opus,.webm,.flac" disabled></label>
+  </div>
+  <progress id="progress" max="1" value="0" hidden></progress>
+  <p id="status" class="label">Checking this browser…</p>
+
+  <div id="output" lang="hi" aria-live="polite"></div>
+  <p id="meta" class="meta"></p>
+  <p id="error" class="meta" role="alert"></p>
+  <p class="meta"><button id="forget" class="link" type="button" hidden>Remove the saved model from this browser</button></p>
+
+  <footer>
+    <a href="https://huggingface.co/udgamlabs/Shruti">Shruti</a> by Udgam Labs, built on Cactus Whistle, Apache-2.0.
+    Engine: <a href="https://huggingface.co/Cactus-Compute/needle3">Cactus needle</a> (WebAssembly build, Apache-2.0).
+  </footer>
+</main>
+
+<script>
+'use strict'
+const MODEL_URL = 'https://huggingface.co/udgamlabs/Shruti/resolve/main/shruti.cact'
+const MODEL_SHA256 = 'b189e954aaed4a9fd41acbad3ac05e486381e96325b22a4c695b9ea5153d7065' // Shruti 1.0, see SHA256SUMS
+const MODEL_BYTES = 29546527
+const CACHE_NAME = 'shruti-example-v1' // the same name as in shruti-worker.js
+const SR = 16000 // the engine takes 16 kHz mono float samples in [-1, 1]
+const LANGUAGES = { hi: 'Hindi', en: 'English' }
+
+const $ = (id) => document.getElementById(id)
+const ui = { load: $('load'), record: $('record'), file: $('file'), progress: $('progress'), status: $('status'),
+  output: $('output'), meta: $('meta'), error: $('error'), forget: $('forget') }
+
+let worker = null
+let ready = false
+let busy = false
+let mic = null
+let nextId = 1
+const waiting = new Map()
+
+function refresh() {
+  ui.record.textContent = mic ? 'Stop' : 'Record'
+  ui.record.disabled = !ready || (busy && !mic)
+  ui.file.disabled = !ready || busy
+}
+const mb = (bytes) => (bytes / 1e6).toFixed(1)
+
+// ——— The engine, in a Web Worker
+function load() {
+  if (worker) worker.terminate()
+  ready = false
+  ui.load.disabled = true
+  ui.error.textContent = ''
+  ui.status.textContent = 'Starting…'
+  worker = new Worker('shruti-worker.js')
+  worker.onmessage = (e) => onMessage(e.data)
+  worker.onerror = (e) => fail('The speech engine could not start in this browser. ' + (e.message || ''))
+  worker.postMessage({ type: 'init', url: MODEL_URL, sha256: MODEL_SHA256, bytes: MODEL_BYTES })
+}
+
+function fail(message) {
+  ui.progress.hidden = true
+  ui.load.hidden = false
+  ui.load.disabled = false
+  ui.status.textContent = 'Not running'
+  ui.error.textContent = message
+}
+
+function onMessage(m) {
+  if (m.type === 'progress') {
+    ui.progress.hidden = false
+    ui.progress.value = m.loaded / m.total
+    ui.status.textContent = `Downloading Shruti · ${mb(m.loaded)} of ${mb(m.total)} MB · once`
+  } else if (m.type === 'ready') {
+    ready = true
+    ui.progress.hidden = true
+    ui.load.hidden = true
+    ui.forget.hidden = !m.saved
+    ui.status.textContent = m.source === 'cache' ? 'Ready · loaded from this browser, no download'
+      : m.saved ? 'Ready · saved in this browser for next time' : 'Ready · not saved: this browser blocks storage'
+    refresh()
+  } else if (m.type === 'result' || m.type === 'error') {
+    const w = waiting.get(m.id)
+    if (w) {
+      waiting.delete(m.id)
+      if (m.type === 'result') w.resolve(m)
+      else w.reject(new Error(m.message))
+    } else if (m.type === 'error') fail('Shruti could not start: ' + m.message)
+  }
+}
+
+function transcribe(pcm) {
+  return new Promise((resolve, reject) => {
+    const id = nextId++
+    waiting.set(id, { resolve, reject })
+    worker.postMessage({ type: 'transcribe', id, pcm, language: null }, [pcm.buffer]) // null: detect the language
+  })
+}
+
+async function run(getAudio, kind) {
+  busy = true
+  refresh()
+  ui.output.textContent = ''
+  ui.error.textContent = ''
+  ui.meta.textContent = 'Transcribing on this device…'
+  try {
+    const pcm = await getAudio()
+    if (pcm.length < 0.3 * SR) throw new Error('That is too short to transcribe.')
+    const r = await transcribe(pcm)
+    ui.output.textContent = r.text || '(no speech heard)'
+    ui.meta.textContent = `${r.seconds.toFixed(1)} s of ${kind} · ${(r.ms / 1000).toFixed(2)} s on this device`
+      + (r.language ? ` · ${LANGUAGES[r.language] || r.language} detected` : '')
+  } catch (e) {
+    ui.meta.textContent = ''
+    ui.error.textContent = e.message
+  } finally {
+    busy = false
+    refresh()
+  }
+}
+
+// ——— Audio → 16 kHz mono. decodeAudioData in a 16 kHz context decodes any format the browser plays and resamples it.
+async function decodeTo16k(data) {
+  const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext
+  const audio = await new Offline(1, 1, SR).decodeAudioData(data)
+  if (audio.sampleRate !== SR) throw new Error('This browser could not convert the audio to 16 kHz.')
+  const out = new Float32Array(audio.length)
+  for (let c = 0; c < audio.numberOfChannels; c++) {
+    const d = audio.getChannelData(c)
+    for (let i = 0; i < d.length; i++) out[i] += d[i] / audio.numberOfChannels
+  }
+  return out
+}
+
+// A recording as a 16-bit WAV, so that the same decoder converts it to 16 kHz.
+function wav(pcm, rate) {
+  const v = new DataView(new ArrayBuffer(44 + pcm.length * 2))
+  const text = (at, s) => { for (let i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i)) }
+  text(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); text(8, 'WAVE'); text(12, 'fmt ')
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true)
+  v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); text(36, 'data')
+  v.setUint32(40, pcm.length * 2, true)
+  for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true)
+  return v.buffer
+}
+
+// ——— Microphone: an AudioWorklet (capture-worklet.js) collects samples at the device's rate until Stop.
+async function openMic() {
+  const ctx = new AudioContext()
+  const resumed = ctx.resume() // inside the click, so Safari lets the context start
+  let media
+  try {
+    media = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  } catch (e) {
+    ctx.close()
+    if (e.name === 'NotAllowedError') throw new Error('Microphone access is blocked for this page.')
+    if (e.name === 'NotFoundError') throw new Error('No microphone was found.')
+    throw new Error('Could not open the microphone.')
+  }
+  await resumed
+  await ctx.audioWorklet.addModule('capture-worklet.js')
+  const node = new AudioWorkletNode(ctx, 'shruti-capture')
+  const blocks = []
+  node.port.onmessage = (e) => blocks.push(e.data)
+  const source = ctx.createMediaStreamSource(media)
+  const mute = ctx.createGain()
+  mute.gain.value = 0 // keeps the graph running without playing the microphone back
+  source.connect(node)
+  node.connect(mute)
+  mute.connect(ctx.destination)
+  const started = Date.now()
+  const timer = setInterval(() => { ui.meta.textContent = `Recording · ${Math.floor((Date.now() - started) / 1000)} s` }, 250)
+  return {
+    async stop() {
+      clearInterval(timer)
+      node.port.postMessage('stop')
+      await new Promise((r) => setTimeout(r, 60)) // let the last block arrive
+      source.disconnect()
+      node.disconnect()
+      media.getTracks().forEach((t) => t.stop())
+      await ctx.close()
+      const pcm = new Float32Array(blocks.reduce((n, b) => n + b.length, 0))
+      let at = 0
+      for (const b of blocks) { pcm.set(b, at); at += b.length }
+      return { pcm, rate: ctx.sampleRate }
+    },
+  }
+}
+
+// ——— Controls
+ui.load.onclick = load
+
+ui.record.onclick = async () => {
+  if (mic) {
+    const m = mic
+    mic = null
+    await run(async () => { const { pcm, rate } = await m.stop(); return decodeTo16k(wav(pcm, rate)) }, 'speech')
+    return
+  }
+  ui.error.textContent = ''
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    ui.error.textContent = 'The microphone needs a secure page: open this example on http://localhost or over https.'
+    return
+  }
+  try {
+    busy = true
+    mic = await openMic()
+    ui.output.textContent = ''
+  } catch (e) {
+    busy = false
+    ui.error.textContent = e.message
+  }
+  refresh()
+}
+
+ui.file.onchange = () => {
+  const f = ui.file.files[0]
+  ui.file.value = ''
+  if (!f) return
+  run(async () => {
+    try {
+      return await decodeTo16k(await f.arrayBuffer())
+    } catch (e) {
+      throw new Error('Could not read this file. Try a WAV, MP3, M4A or OGG recording.')
+    }
+  }, 'audio')
+}
+
+ui.forget.onclick = async () => {
+  if (worker) worker.terminate()
+  worker = null
+  ready = false
+  try { await caches.delete(CACHE_NAME) } catch (e) { /* nothing stored */ }
+  ui.forget.hidden = true
+  ui.load.hidden = false
+  ui.load.disabled = false
+  ui.status.textContent = 'Removed · Shruti downloads again when you load it'
+  refresh()
+}
+
+// A returning visitor has the model in this browser already: start straight away, with no download.
+;(async () => {
+  if (typeof WebAssembly !== 'object' || typeof Worker === 'undefined') {
+    ui.load.disabled = true
+    ui.status.textContent = 'This browser cannot run Shruti: it needs WebAssembly and Web Workers'
+    return
+  }
+  try {
+    if (window.caches && await caches.match(MODEL_URL, { cacheName: CACHE_NAME })) return load()
+  } catch (e) { /* storage blocked: load on request */ }
+  ui.status.textContent = 'Not loaded · downloads once from Hugging Face, then runs offline'
+})()
+</script>
+</body>
+</html>

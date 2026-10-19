@@ -1,0 +1,40 @@
+{
+ "device": "Samsung Galaxy F62 (SM-E625F), Exynos 9825, 6 GB RAM, Android 13",
+ "engine": "Cactus needle, android-arm64 build of 2026-10-18",
+ "model": "shruti.cact (sha256 b189e954...)",
+ "results": {
+  "2": {
+   "identical": 42,
+   "rtf_all": 6.6,
+   "long60_s": 9.5,
+   "long60_x": 6.3,
+   "ram_max_mb": 80,
+   "mon_median_ms": 1010
+  },
+  "4": {
+   "identical": 42,
+   "rtf_all": 4.6,
+   "long60_s": 12.6,
+   "long60_x": 4.8,
+   "ram_max_mb": 80,
+   "mon_median_ms": 1301
+  },
+  "8": {
+   "identical": 42,
+   "rtf_all": 1.5,
+   "long60_s": 65.8,
+   "long60_x": 0.9,
+   "ram_max_mb": 80,
+   "mon_median_ms": 3977
+  }
+ },
+ "keys": {
+  "identical": "transcripts identical to the Mac, of 51",
+  "rtf_all": "times faster than real time, all clips",
+  "long60_s": "seconds to transcribe a 60 s recording",
+  "long60_x": "times faster than real time on that recording",
+  "ram_max_mb": "peak memory, MB",
+  "mon_median_ms": "median ms per Monsoon sentence (~7 s), model load included"
+ },
+ "note": "Top-level keys of results = number of threads. 2 threads is best on this phone."
+}

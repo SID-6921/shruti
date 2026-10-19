@@ -1,0 +1,15 @@
+{
+ "cact": "shruti.cact (sha256 b189e954...)",
+ "decoder": "Cactus needle engine (native, Apple M-series Mac), default 5 beams, language set per test",
+ "monsoon_hi_oiwer": 20.46,
+ "fleurs_hi_wer": 19.92,
+ "librispeech_clean_wer": 5.95,
+ "mucs_hinglish_wer": 35.21,
+ "mucs_latin_words_ref": 9122,
+ "mucs_latin_words_hyp": 10713,
+ "svarah_indian_english_wer": 22.47,
+ "lahaja_hindi_accents_wer": 26.28,
+ "silence_words": 0,
+ "eval_seconds": 1079,
+ "measured": "2026-10-18"
+}
